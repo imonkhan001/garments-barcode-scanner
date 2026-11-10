@@ -1,0 +1,1 @@
+# garments-barcode-scanner

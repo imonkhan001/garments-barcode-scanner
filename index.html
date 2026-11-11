@@ -61,7 +61,26 @@ async function onScan(decoded){
 async function startCamera(){if(!window.Html5Qrcode){$('status').textContent='Scanner library failed to load. Check internet.';return}try{if(!scanner)scanner=new Html5Qrcode('reader');await scanner.start({facingMode:'environment'},{fps:12,qrbox:{width:280,height:170},aspectRatio:1.4},onScan,()=>{});running=true;$('startBtn').disabled=true;$('stopBtn').disabled=false;$('status').textContent='Camera running continuously. Keep the full label visible.';try{const c=scanner.getRunningTrackCameraCapabilities();torchSupported=!!(c&&c.torch)}catch(e){torchSupported=false}$('torchBtn').disabled=!torchSupported;torchOn=false;$('torchBtn').textContent='Flashlight: Off'}catch(e){$('status').textContent='Camera did not start. Check permission and HTTPS, then tap Start camera. '+(e.message||e)}}
 async function stopCamera(){if(scanner&&running){try{await scanner.stop()}catch(e){}running=false;$('startBtn').disabled=false;$('stopBtn').disabled=true;$('torchBtn').disabled=true;$('status').textContent='Camera stopped.'}}
 async function toggleTorch(){if(!running||!torchSupported)return;try{await scanner.applyVideoConstraints({advanced:[{torch:!torchOn}]});torchOn=!torchOn;$('torchBtn').textContent='Flashlight: '+(torchOn?'On':'Off')}catch(e){$('status').textContent='This camera/browser cannot toggle flashlight.'}}
-function saveCurrent(){const r={};keys.forEach(k=>r[k]=get(k));if(!r.barcode){alert('Barcode field is required.');return}if(!r.wt||!Number.isFinite(Number(r.wt))||Number(r.wt)<=0){if(!confirm('Valid WT (KG) was not found. Save this record with 0 KG?'))return;r.wt='0'}r.time=new Date().toISOString();records.push(r);save();$('status').textContent='Garment record saved. Camera is still running; scan the next label.';clearForm()}
+function coreValue(r,k){return String(r[k]??'').trim().toUpperCase().replace(/\s+/g,' ')}
+function saveCurrent(){
+ const r={};keys.forEach(k=>r[k]=get(k));
+ if(!r.barcode){alert('Barcode field is required.');return}
+ if(!r.wt||!Number.isFinite(Number(r.wt))||Number(r.wt)<=0){alert('Enter a valid WT (KG) greater than 0.');return}
+ const core=['buyer','style','color','gsm','sl','yc','yl'];
+ const same=records.filter(x=>String(x.barcode||'').trim()===r.barcode);
+ const base=same[0];
+ if(base){
+  core.forEach(k=>{if(!r[k]&&base[k])r[k]=base[k]});
+  const differences=core.filter(k=>coreValue(r,k)&&coreValue(base,k)&&coreValue(r,k)!==coreValue(base,k));
+  if(differences.length){
+   if(!confirm('WARNING: This barcode already exists, but these fields differ: '+differences.join(', ').toUpperCase()+'. Save as a separate CONFLICT record?'))return;
+   r.matchStatus='CONFLICT';
+  }else r.matchStatus='MATCHED';
+ }else r.matchStatus='MASTER';
+ r.time=new Date().toISOString();records.push(r);save();
+ $('status').textContent='Saved as '+r.matchStatus+'. KG is recorded separately for this roll. Camera remains on.';
+ clearForm();
+}
 $('startBtn').onclick=startCamera;$('stopBtn').onclick=stopCamera;$('torchBtn').onclick=toggleTorch;$('saveBtn').onclick=saveCurrent;$('clearFormBtn').onclick=clearForm;$('parseBtn').onclick=()=>fillFromText($('rawText').value,get('barcode'));
 $('records').onclick=e=>{const b=e.target.closest('[data-del]');if(b){records.splice(Number(b.dataset.del),1);save()}};
 $('clearAllBtn').onclick=()=>{if(confirm('Delete all garment records from this browser?')){records=[];save()}};
